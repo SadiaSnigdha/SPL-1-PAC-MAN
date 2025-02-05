@@ -3,20 +3,20 @@
 #include<vector>
 #include<unordered_map>
 #include<ctime>
-#include<chrono>
 #include<fstream>
 #include<string>
-#include<queue>
+
 using namespace std;
 
 #define ROWS 15
-#define COLS 15
-#define CELL_SIZE 30
+#define COLS 22
+#define CELL_SIZE 25
 
 #define WALL 1
 #define OBSTACLE 2
 #define DOT 3
 #define POWER_UP 4
+#define RED_ZONE 5
 #define EMPTY 0
 
 int maze[ROWS][COLS];
@@ -28,11 +28,8 @@ int ghostCount;
 int ghostsX[10];
 int ghostsY[10];
 int ghostMoveCounter = 0;
-const int ghostMoveFrequency = 5;
+const int ghostMoveFrequency = 5; 
 
-chrono::time_point<chrono::steady_clock> powerUpCollectedTime;  
-
-//up,down,left,right
 int DX[] = {-1, 1, 0, 0};
 int DY[] = {0, 0, -1, 1}; 
 int score = 0;
@@ -40,26 +37,121 @@ int level;
 bool gameOver = false;
 bool invincible = false;
 
-struct Node {
-        int x;
-        int y;
-        int g;
-        int h; // g = cost from start, h = heuristic
-        Node* parent;
+int remainingDots = 0; 
+const int MAX_RED_ZONES = 10; 
+int redZoneCount ;
+int redZoneX[MAX_RED_ZONES], redZoneY[MAX_RED_ZONES];
+const int SCREEN_HEIGHT = 600; 
 
-        int f() const {
-             return g + h; 
+std::vector<int> readScoresFromFile(const std::string& filename);
+void drawTimer();
+bool isGhostAtPosition(int x, int y);
+struct Node {
+    int x, y;
+    int g, h;
+    Node* parent;
+
+    Node(int x, int y, int g, int h, Node* parent = nullptr)
+        : x(x), y(y), g(g), h(h), parent(parent) {}
+
+    int f() const {
+        return g + h;
+    }
+};
+
+void drawButton(int x, int y, int width, int height, const char* label) {
+    setfillstyle(SOLID_FILL, LIGHTBLUE);
+    bar(x, y, x + width, y + height);
+    setcolor(BLACK);
+    rectangle(x, y, x + width, y + height);
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 2);
+    setbkcolor(BLACK);
+    setcolor(WHITE);
+    outtextxy(x + 10, y + 10, (char*)label);
+}
+
+bool isButtonClicked(int x, int y, int width, int height, int clickX, int clickY) {
+    return (clickX >= x && clickX <= x + width && clickY >= y && clickY <= y + height);
+}
+
+void displayScores(const string& filename) {
+    vector<int> scores = readScoresFromFile(filename);
+
+    // If no scores exist, show only one default score
+    if (scores.empty()) {
+        cout << "No scores available.\n";
+        return;
+    }
+
+    cleardevice();
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
+    outtextxy(100, 50, (char*)"Top Scores:");
+
+    // Display up to 10 scores
+    int numScoresToShow = min(10, (int)scores.size());
+
+    for (int i = 0; i < numScoresToShow; i++) {
+        char scoreText[50];
+        sprintf(scoreText, "%d: %d", i + 1, scores[i]);
+        outtextxy(100, 100 + i * 30, scoreText);
+    }
+
+    getch();
+}
+
+
+void displayRules() {
+    cleardevice();
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
+    outtextxy(100, 50, (char*)"Game Rules:");
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 2);
+    outtextxy(100, 100, (char*)"1. Navigate the maze.");
+    outtextxy(100, 140, (char*)"2. Avoid obstacles and ghosts.");
+    outtextxy(100, 180, (char*)"3. Collect points to win.");
+    outtextxy(100, 220, (char*)"4. Use arrow keys for movement.");
+    getch();
+}
+
+void mainMenu() {
+    bool redraw = true;  // Flag to track when to redraw the screen
+
+    while (true) {
+        if (redraw) {
+            cleardevice(); 
+            settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
+            outtextxy(100, 50, (char*)"Main Menu");
+            drawButton(100, 120, 300, 50, "1. Level Selection");
+            drawButton(100, 200, 300, 50, "2. Scores");
+            drawButton(100, 280, 300, 50, "3. Rules");
+            drawButton(100, 360, 300, 50, "4. Exit");
+            redraw = false;  // Reset the flag after drawing
         }
 
-        bool operator<(const Node& other) const {
-            if (f() > other.f()) {
-                return true; // Current node has a higher f(), so it is "less than" the other node for priority queue purposes.
+        if (ismouseclick(WM_LBUTTONDOWN)) {
+            int clickX, clickY;
+            getmouseclick(WM_LBUTTONDOWN, clickX, clickY);
+
+            if (isButtonClicked(100, 120, 300, 50, clickX, clickY)) {
+                return;  
             } 
-            else {
-                return false; 
+            else if (isButtonClicked(100, 200, 300, 50, clickX, clickY)) {
+                displayScores("score.txt");
+                redraw = true; 
+            } 
+            else if (isButtonClicked(100, 280, 300, 50, clickX, clickY)) {
+                displayRules();
+                redraw = true; 
+            } 
+            else if (isButtonClicked(100, 360, 300, 50, clickX, clickY)) {
+                closegraph(); 
+                exit(0);   
             }
         }
-};
+
+        delay(50); 
+    }
+}
+
 
 //level selection screen
 string selectLevel(){
@@ -92,15 +184,18 @@ string selectLevel(){
             if (x >= 100 && x <= 300 && y >= 100 && y <= 200)
             {
                 level = 1;
+                redZoneCount = 2;
                 return "easy_maze.txt"; 
             }
             else if (x >= 350 && x <= 550 && y >= 100 && y <= 200)
             {
                  level = 2;
+                 redZoneCount = 4;
                 return "medium_maze.txt"; 
             }
             else if (x >= 600 && x <= 800 && y >= 100 && y <= 200) {
                 level = 3;
+                redZoneCount = 6;
                 return "hard_maze.txt"; 
             }
         }
@@ -132,6 +227,7 @@ void loadMazeFromFile(const string& filename) {
             }
             else if (line[col] == '.') {
                 maze[row][col] = DOT;
+                remainingDots++;
             }
             else if (line[col] == 'E') {
                 maze[row][col] = EMPTY;
@@ -139,11 +235,29 @@ void loadMazeFromFile(const string& filename) {
         }
         row++;
     }
+    if (remainingDots == 0) {
+        cout << "Error: No dots found in the maze! Check your maze initialization." << endl;
+        exit(1);
+    }
     file.close();
-    maze[playerX][playerY] = EMPTY; // Ensure player starts at a valid position
+    maze[playerX][playerY] = EMPTY;
         
     for (int i = 0; i < ghostCount; ++i) {
-            maze[ghostsX[i]][ghostsY[i]] = EMPTY; // Ensure ghosts start at valid positions
+            maze[ghostsX[i]][ghostsY[i]] = EMPTY; 
+    }
+
+    srand(time(0)); 
+    int count = 0;
+    while (count < redZoneCount) {
+        int x = rand() % ROWS;
+        int y = rand() % COLS;
+
+        if (maze[x][y] == EMPTY && !(x == playerX && y == playerY)) {
+            redZoneX[count] = x;
+            redZoneY[count] = y;
+            maze[x][y] = RED_ZONE; 
+            count++;
+        }
     }
 }
 
@@ -175,6 +289,12 @@ void drawMaze() {
                     setcolor(YELLOW);
                     fillellipse(x + CELL_SIZE / 2, y + CELL_SIZE / 2, 8, 8);
                     break;
+                case RED_ZONE:  
+                    setfillstyle(SOLID_FILL, RED);
+                    bar(x, y, x + CELL_SIZE, y + CELL_SIZE);
+                    setcolor(BLACK);
+                    rectangle(x, y, x + CELL_SIZE, y + CELL_SIZE);
+                    break;
                 case EMPTY:
                     setfillstyle(SOLID_FILL, BLACK);
                     bar(x, y, x + CELL_SIZE, y + CELL_SIZE);
@@ -182,16 +302,15 @@ void drawMaze() {
             }
         }
     }
-    // draw player
+
     setfillstyle(SOLID_FILL, GREEN);
     fillellipse(playerY * CELL_SIZE + CELL_SIZE / 2, playerX * CELL_SIZE + CELL_SIZE / 2, 10, 10);
 
-    // draw ghosts
     for (int i = 0; i < ghostCount; ++i) {
         setfillstyle(SOLID_FILL, RED);
         fillellipse(ghostsY[i] * CELL_SIZE + CELL_SIZE / 2, ghostsX[i] * CELL_SIZE + CELL_SIZE / 2, 10, 10);
     }
-        
+      drawTimer();  
 }
 
 //maze er niche score and level no dekha jabe
@@ -201,19 +320,75 @@ void drawScoreAndLevel() {
     sprintf(scoreText, "SCORE: %d", score);
     sprintf(levelText, "LEVEL: %d", level);
 
-    setcolor(WHITE);  //text color
+    setcolor(WHITE); 
     settextstyle(DEFAULT_FONT, HORIZ_DIR, 2.5);
 
     outtextxy(50, 600, scoreText);  
     outtextxy(300, 600, levelText);
 }
 
+//min-heap
+void heapifyUp(vector<Node*>& heap, int index) {
+    while (index > 0) {
+        int parentIdx = (index - 1) / 2;
+        if (heap[index]->f() >= heap[parentIdx]->f()) 
+            break;
+
+        Node* temp = heap[index];
+        heap[index] = heap[parentIdx];
+        heap[parentIdx] = temp;
+
+        index = parentIdx;
+    }
+}
+
+void heapifyDown(vector<Node*>& heap, int index) {
+    int leftChildIdx = 2 * index + 1;
+    int rightChildIdx = 2 * index + 2;
+    int smallestIdx = index;
+
+    if (leftChildIdx < heap.size() && heap[leftChildIdx]->f() < heap[smallestIdx]->f()) {
+        smallestIdx = leftChildIdx;
+    }
+
+    if (rightChildIdx < heap.size() && heap[rightChildIdx]->f() < heap[smallestIdx]->f()) {
+        smallestIdx = rightChildIdx;
+    }
+
+    if (smallestIdx != index) {
+        Node* temp = heap[index];
+        heap[index] = heap[smallestIdx];
+        heap[smallestIdx] = temp;
+        heapifyDown(heap, smallestIdx);
+    }
+}
+
+void pushToMinHeap(vector<Node*>& heap, Node* node) {
+    heap.push_back(node);
+    heapifyUp(heap, heap.size() - 1);
+}
+
+Node* popFromMinHeap(vector<Node*>& heap) {
+    if (heap.empty()) 
+        return nullptr;
+
+    Node* top = heap[0];
+    heap[0] = heap.back();
+    heap.pop_back();
+    heapifyDown(heap, 0);
+    return top;
+}
+
+bool isHeapEmpty(const vector<Node*>& heap) {
+    return heap.empty();
+}
+
 bool isValidMove(int x, int y) {
     if (x < 0 || x >= ROWS) {
-        return false; // Out of bounds in x
+        return false; 
     } 
     else if (y < 0 || y >= COLS) {
-        return false; // Out of bounds in the y direction
+        return false; 
     } 
     else if (maze[x][y] == WALL) {
         return false;
@@ -222,13 +397,13 @@ bool isValidMove(int x, int y) {
         return false;
     } 
     else {
-        return true; // Valid move
+        return true;
     }
 }
 
 int manhattanDistance(int x1, int y1, int x2, int y2) {
     int dx, dy;
-    //absolute difference for x-coordinates
+    
     if (x1 > x2) {
         dx = x1 - x2;
     } 
@@ -236,7 +411,6 @@ int manhattanDistance(int x1, int y1, int x2, int y2) {
         dx = x2 - x1;
     }
 
-    //absolute difference for y-coordinates
     if (y1 > y2) {
         dy = y1 - y2;
     } 
@@ -257,53 +431,68 @@ void reverseVector(std::vector<Node>& path) {
 
 }
 vector<Node> aStar(int startX, int startY, int goalX, int goalY) {
-    priority_queue<Node> openSet;
+    vector<Node*> openSet;
     unordered_map<int, unordered_map<int, bool>> closedSet;
+    unordered_map<int, unordered_map<int, Node*>> allNodes;
 
-    Node startNode = {startX, startY, 0, manhattanDistance(startX, startY, goalX, goalY), nullptr};
-    openSet.push(startNode);
+    Node* startNode = new Node{startX, startY, 0, manhattanDistance(startX, startY, goalX, goalY), nullptr};
+    pushToMinHeap(openSet, startNode);
+    allNodes[startX][startY] = startNode;
 
     vector<Node> path;
 
-    while (!openSet.empty()) {
-        Node currentNode = openSet.top();
-        openSet.pop();
+    while (!isHeapEmpty(openSet)) {
+        Node* currentNode = popFromMinHeap(openSet);
 
-        if (currentNode.x == goalX && currentNode.y == goalY) {
-            Node* node = &currentNode;
+        // Goal reached
+        if (currentNode->x == goalX && currentNode->y == goalY) {
+            Node* node = currentNode;
             while (node != nullptr) {
                 path.push_back(*node);
                 node = node->parent;
             }
             reverseVector(path);
-                // Debugging: Print the path
-            cout << "Path from (" << startX << "," << startY << ") to (" << goalX << "," << goalY << "): ";
-            for (const auto& step : path) {
-                cout << "(" << step.x << "," << step.y << ") ";
-            }
-            cout << endl;
-            return path;
+            break;
         }
 
-        closedSet[currentNode.x][currentNode.y] = true;
+        closedSet[currentNode->x][currentNode->y] = true;
 
+        // Explore neighbors
         for (int i = 0; i < 4; ++i) {
-            int newX = currentNode.x + DX[i];
-            int newY = currentNode.y + DY[i];
+            int newX = currentNode->x + DX[i];
+            int newY = currentNode->y + DY[i];
 
             if (isValidMove(newX, newY) && !closedSet[newX][newY]) {
-                int newG = currentNode.g + 1;
+                int newG = currentNode->g + 1;
                 int newH = manhattanDistance(newX, newY, goalX, goalY);
-                Node neighbor = {newX, newY, newG, newH, new Node(currentNode)};
-                openSet.push(neighbor);
+
+                if (allNodes[newX][newY]) {
+                    Node* neighbor = allNodes[newX][newY];
+                    if (newG < neighbor->g) {
+                        neighbor->g = newG;
+                        neighbor->parent = currentNode;
+                        pushToMinHeap(openSet, neighbor);
+                    }
+                } else {
+                    Node* newNode = new Node{newX, newY, newG, newH, currentNode};
+                    pushToMinHeap(openSet, newNode);
+                    allNodes[newX][newY] = newNode;
+                }
             }
         }
     }
 
-    return path; // Return empty path if no path is found
+    for (auto& row : allNodes) {
+        for (auto& pair : row.second) {
+            delete pair.second;
+        }
+    }
+
+    return path;
 }
 
-//ghost count based on difficulty
+
+
 void setGhostCount(const string& level) {
     if (level == "easy_maze.txt") {
         ghostCount = 2;
@@ -315,16 +504,16 @@ void setGhostCount(const string& level) {
         ghostCount = 6;
     } 
     else {
-        ghostCount = 3; // Default value
+        ghostCount = 3;
     }
 }
 
 void initializeGhostPositions() {
     for (int i = 0; i < ghostCount; ++i) 
     {
-        ghostsX[i] = ROWS / 2 + i % 2; // Stagger initial positions
-        ghostsY[i] = COLS / 2 + (i / 2); // Distribute evenly
-        maze[ghostsX[i]][ghostsY[i]] = EMPTY; // Ensure ghosts start on valid cells
+        ghostsX[i] = ROWS / 2 + i % 2; 
+        ghostsY[i] = COLS / 2 + (i / 2); 
+        maze[ghostsX[i]][ghostsY[i]] = EMPTY; 
     }
 }
 void moveGhosts() {
@@ -332,7 +521,7 @@ void moveGhosts() {
         int targetX = playerX;
         int targetY = playerY;
 
-        // Different pathfinding strategy for each ghost
+        //pathfinding -> each ghost
         if (i == 0 || i == 1) {
             if (i == 0) {
                 targetX = playerX - 1;
@@ -353,42 +542,82 @@ void moveGhosts() {
                 targetY = playerY + 1;
             }
         }
-
-        // Ensure the target is within maze bounds
+        if (rand() % 2 == 0) {
+            targetX += (rand() % 2) * 2 - 1; 
+        }
+        if (rand() % 2 == 0) {
+            targetY += (rand() % 2) * 2 - 1; 
+        }
         targetX = max(0, min(ROWS - 1, targetX));
         targetY = max(0, min(COLS - 1, targetY));
 
-        // Calculate the path to the target using A* pathfinding
-        vector<Node> path = aStar(ghostsX[i], ghostsY[i], targetX, targetY);
+        bool occupied = false;
+        for (int j = 0; j < ghostCount; ++j) {
+            if (i != j && ghostsX[i] == ghostsX[j] && ghostsY[i] == ghostsY[j]) {
+                occupied = true;
+                break;
+            }
+        }
 
-        if (!path.empty() && path.size() > 1) {
-            // Move the ghost to the next position on the path
-            Node nextNode = path[1];
-            ghostsX[i] = nextNode.x;
-            ghostsY[i] = nextNode.y;
+        if (occupied) {
+            bool moved = false;
+            for (int attempt = 0; attempt < 4; ++attempt) {
+                int randomDir = rand() % 4;
+                int newX = ghostsX[i] + DX[randomDir];
+                int newY = ghostsY[i] + DY[randomDir];
+
+                if (isValidMove(newX, newY) && !isGhostAtPosition(newX, newY)) {
+                    ghostsX[i] = newX;
+                    ghostsY[i] = newY;
+                    moved = true;
+                    break;
+                }
+            }
+
+            if (!moved) {
+                cout << "Ghost " << i << " is stuck!" << endl;
+            }
         } 
-        else {
-            // If no path is found, move randomly
-            int randomDir = rand() % 4;
-            int newX = ghostsX[i] + DX[randomDir];
-            int newY = ghostsY[i] + DY[randomDir];
 
-            if (isValidMove(newX, newY)) {
-                ghostsX[i] = newX;
-                ghostsY[i] = newY;
+        else {
+            vector<Node> path = aStar(ghostsX[i], ghostsY[i], targetX, targetY);
+
+            if (!path.empty() && path.size() > 1) {
+                Node nextNode = path[1];
+                ghostsX[i] = nextNode.x;
+                ghostsY[i] = nextNode.y;
+            } 
+            else {
+                
+                bool moved = false;
+                for (int attempt = 0; attempt < 4; ++attempt) {
+                    int randomDir = rand() % 4;
+                    int newX = ghostsX[i] + DX[randomDir];
+                    int newY = ghostsY[i] + DY[randomDir];
+
+                    if (isValidMove(newX, newY) && !isGhostAtPosition(newX, newY)) {
+                        ghostsX[i] = newX;
+                        ghostsY[i] = newY;
+                        moved = true;
+                        break;
+                    }
+                }
+
+                if (!moved) {
+                    cout << "Ghost " << i << " is stuck!" << endl;
+                }
             }
         }
     }
 }
 
-    //check collision with ghosts
-void checkCollision() {
+bool isGhostAtPosition(int x, int y) {
     for (int i = 0; i < ghostCount; ++i) {
-        if (playerX == ghostsX[i] && playerY == ghostsY[i]) {
-            gameOver = true;
-            cout << "Game Over! You were caught by a ghost!" << endl;
+        if (ghostsX[i] == x && ghostsY[i] == y) {
+            return true;
         }
     }
+    return false;
 }
 
 void placePowerUps() {
@@ -405,44 +634,18 @@ void placePowerUps() {
 
     int powerUpsPlaced = 0;
 
-    // Randomly place power-ups in the maze
     while (powerUpsPlaced < powerUpsToPlace) {
         int x = rand() % ROWS;
         int y = rand() % COLS;
 
-        // Check if the position is valid (not a wall, obstacle, or already occupied)
         if (maze[x][y] == EMPTY) {
-            maze[x][y] = POWER_UP;  // Place power-up here
+            maze[x][y] = POWER_UP;  
             powerUpsPlaced++;
         }
     }
 }
 
-void drawRemainingTime(int remainingTime) {
-    char timeText[20];
-    sprintf(timeText, "TIME LEFT: %d", remainingTime);  // Displaying countdown
-    setcolor(WHITE);  // Text color
-    settextstyle(DEFAULT_FONT, HORIZ_DIR, 2.5);
-    outtextxy(50, 650, timeText);  // Position the text lower on the screen
-}
-
-// Check invincibility timer and update time remaining
-void checkInvincibility() {
-    if (invincible) {
-        auto now = chrono::steady_clock::now();
-        auto duration = chrono::duration_cast<chrono::seconds>(now - powerUpCollectedTime).count();
-        
-        int remainingTime = 5 - duration;  // 5 seconds - elapsed time
-        if (remainingTime <= 0) {
-            invincible = false;
-            remainingTime = 0;  // Ensure the time doesn't go negative
-        }
-
-        // Display remaining time (countdown)
-        drawRemainingTime(remainingTime);
-    }
-}
-
+int ghostCooldown ;
 //player movement
 void movePlayer(char direction) {
     int newX = playerX;
@@ -469,29 +672,233 @@ void movePlayer(char direction) {
         playerY = newY;
         if (maze[newX][newY] == DOT)
         {
+            remainingDots--;
             maze[newX][newY] = EMPTY;
             score += 10;
         } 
         else if (maze[newX][newY] == POWER_UP)
         {
+            score += 30;
             maze[newX][newY] = EMPTY;
+            ghostCooldown = 5; 
             invincible = true;
+            cout << "Power-Up collected! Ghosts can't kill you for 5 moves!" << endl;
+    
+        }
+        if (ghostCooldown > 0) {
+             ghostCooldown--;
+            if (ghostCooldown == 0) {
+                invincible = false;
+                cout << "Power-Up expired! You can now be caught by ghosts." << endl;
+            }
         }
     }    
 }
 
+void checkCollision() {
+    // যদি প্লেয়ার Ghost এর অবস্থানে যায়, গেম ওভার হবে
+    for (int i = 0; i < ghostCount; ++i) {
+        if (playerX == ghostsX[i] && playerY == ghostsY[i]) {
+            if (!invincible) {
+                gameOver = true;
+                cout << "Game Over! You were caught by a ghost!" << endl;
+            } else {
+                cout << "You're invincible! Ghosts can't kill you right now!" << endl;
+            }
+            return;
+        }
+    }
+
+    //যদি সকল dot collect হয়ে যায়, গেম ওভার হবে
+    if (remainingDots == 0) {
+        gameOver = true;
+        cout << "Congratulations! You collected all the dots!" << endl;
+        return;
+    }
+
+    //যদি প্লেয়ার Red Zone এ ঢুকে, গেম ওভার হবে
+    for (int i = 0; i < redZoneCount; ++i) {
+        if (playerX == redZoneX[i] && playerY == redZoneY[i]) {
+            gameOver = true;
+            cout << "Game Over! You entered a restricted Red Zone!" << endl;
+            return;
+        }
+    }
+}
+
+void drawTimer() {
+    if (ghostCooldown > 0) { 
+        setcolor(WHITE);
+        setbkcolor(BLACK);
+        char timerText[30];
+        sprintf(timerText, "Invincible: %d moves left", ghostCooldown);
+        outtextxy(50, SCREEN_HEIGHT - 30, timerText);
+    }
+}
+
+void gameOverScreen(int score) {
+    cleardevice();
+
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 5);
+    setcolor(RED);
+    outtextxy(200, 100, (char*)"Game Over!");
+
+    // Display the final score
+    settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
+    setcolor(WHITE);
+    char scoreText[50];
+    sprintf(scoreText, "Your Score: %d", score);
+    outtextxy(200, 200, scoreText);
+
+    drawButton(200, 300, 300, 50, "1. Main Menu");
+    drawButton(200, 380, 300, 50, "2. Exit");
+
+    while (true) {
+        if (ismouseclick(WM_LBUTTONDOWN)) {
+            int clickX, clickY;
+            getmouseclick(WM_LBUTTONDOWN, clickX, clickY);
+
+            if (isButtonClicked(200, 300, 300, 50, clickX, clickY)) {
+                cleardevice();
+                mainMenu();  
+                return;      
+            }
+
+            // "Exit" -> close
+            else if (isButtonClicked(200, 380, 300, 50, clickX, clickY)) {
+                closegraph();  
+                exit(0);       
+            }
+        }
+
+        delay(50);  
+    }
+}
+
+vector<int> readScoresFromFile(const string& filename) {
+    vector<int> scores;
+    ifstream file(filename);
+
+    if (file.is_open()) {
+        int score;
+        while (file >> score) {
+            scores.push_back(score);
+        }
+        file.close();
+    }
+
+    return scores;
+}
+
+void writeScoresToFile(const string& filename, const vector<int>& scores) {
+    ofstream file(filename);
+
+    if (file.is_open()) {
+        for (int score : scores) {
+            file << score << endl;
+        }
+        file.close();
+    }
+}
+
+void merge(vector<int>& scores, int l, int mid, int h) {
+    int n1 = mid - l + 1;
+    int n2 = h - mid;
+
+    vector<int> L(n1), R(n2);
+
+    for (int i = 0; i < n1; i++)
+        L[i] = scores[l + i];
+    for (int j = 0; j < n2; j++)
+        R[j] = scores[mid + 1 + j];
+
+    int i = 0, j = 0, k = l;
+
+    while (i < n1 && j < n2) {
+        if (L[i] <= R[j]) {
+            scores[k] = L[i];
+            i++;
+        } else {
+            scores[k] = R[j];
+            j++;
+        }
+        k++;
+    }
+
+    while (i < n1) {
+        scores[k] = L[i];
+        i++;
+        k++;
+    }
+
+    while (j < n2) {
+        scores[k] = R[j];
+        j++;
+        k++;
+    }
+}
+
+void mergeSort(vector<int>& scores, int l, int h) {
+    if (l < h) {
+        int mid = l + (h - l) / 2;
+
+        mergeSort(scores, l, mid);
+        mergeSort(scores, mid + 1, h);
+
+        merge(scores, l, mid, h);
+    }
+}
+
+void updateScores(const string& filename, int newScore) {
+    vector<int> scores;
+
+    // Read scores
+    ifstream infile(filename);
+    int score;
+    while (infile >> score) {
+        scores.push_back(score);
+    }
+    infile.close();
+
+    scores.push_back(newScore);
+
+    // Sort the scores in descending order
+    mergeSort(scores, 0, scores.size() - 1);
+    int l = 0;
+    int r = scores.size() - 1;
+
+    while (l < r) {
+        int t = scores[l];
+        scores[l] = scores[r];
+        scores[r] = t;
+
+        l++;
+        r--;
+    }
+    // top 100 scores
+    if (scores.size() > 100) {
+        scores.resize(100);
+    }
+
+    // Write the top 100 scores
+    ofstream outfile(filename);
+    for (int s : scores) {
+        outfile << s << endl;
+    }
+    outfile.close();
+}
+
 int main(){
     srand(time(0));
-    initwindow(900,900);
+    initwindow(1200,1200);
+    mainMenu();
     string mazeFile = selectLevel();
     setGhostCount(mazeFile);
-    placePowerUps();
     loadMazeFromFile(mazeFile);
     initializeGhostPositions();
     while (!gameOver) {
         drawMaze();
         drawScoreAndLevel();
-        checkInvincibility();
 
         if (ghostMoveCounter % ghostMoveFrequency == 0){
           moveGhosts(); 
@@ -503,10 +910,15 @@ int main(){
         if (gameOver) break;
         if (kbhit()) {
             char move = getch();
-            if (move == 'q') break; 
+            if (move == 'q') 
+                break; 
             movePlayer(move);
         }
         delay(200);
     }
-
+    updateScores("score.txt", score);
+    gameOverScreen(score);
+    getch();
+    closegraph();
+    return 0;
 }
