@@ -8,9 +8,9 @@
 
 using namespace std;
 
-#define ROWS 15
-#define COLS 22
-#define CELL_SIZE 25
+int ROWS ;
+int COLS ;
+#define CELL_SIZE 20
 
 #define WALL 1
 #define OBSTACLE 2
@@ -19,7 +19,7 @@ using namespace std;
 #define RED_ZONE 5
 #define EMPTY 0
 
-int maze[ROWS][COLS];
+vector<vector<int>> maze;
 
 int playerX = 1;
 int playerY = 1;
@@ -46,6 +46,15 @@ const int SCREEN_HEIGHT = 600;
 std::vector<int> readScoresFromFile(const std::string& filename);
 void drawTimer();
 bool isGhostAtPosition(int x, int y);
+string selectLevel();
+void loadMazeFromFile(const string& filename);
+void initializeGhostPositions();
+void setGhostCount(const string& level);
+void startGame(const string& levelFile);  // Forward declaration
+void showLevelSelectionForScores();
+
+bool redraw = true;  // Screen redraw control
+
 struct Node {
     int x, y;
     int g, h;
@@ -74,20 +83,38 @@ bool isButtonClicked(int x, int y, int width, int height, int clickX, int clickY
     return (clickX >= x && clickX <= x + width && clickY >= y && clickY <= y + height);
 }
 
-void displayScores(const string& filename) {
+void displayScores(const string& level) {
+    string filename;
+    if (level == "easy") {
+        filename = "easy_scores.txt";
+    } else if (level == "medium") {
+        filename = "medium_scores.txt";
+    } else if (level == "hard") {
+        filename = "hard_scores.txt";
+    }
     vector<int> scores = readScoresFromFile(filename);
 
-    // If no scores exist, show only one default score
     if (scores.empty()) {
-        cout << "No scores available.\n";
-        return;
+        cleardevice();
+        settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
+        outtextxy(100, 100, (char*)"No scores available.");
+        outtextxy(100, 200, (char*)"Press ESC to return to Main Menu.");
+        
+        while (true) {
+            if (kbhit()) {
+                char key = getch();
+                if (key == 27) {
+                    showLevelSelectionForScores();
+                    return; // ESC চাপলে বের হবে
+                }
+            }
+        }
     }
 
     cleardevice();
     settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
     outtextxy(100, 50, (char*)"Top Scores:");
 
-    // Display up to 10 scores
     int numScoresToShow = min(10, (int)scores.size());
 
     for (int i = 0; i < numScoresToShow; i++) {
@@ -96,8 +123,19 @@ void displayScores(const string& filename) {
         outtextxy(100, 100 + i * 30, scoreText);
     }
 
-    getch();
+    outtextxy(100, 400, (char*)"Press ESC to return to Main Menu.");
+
+    while (true) {
+        if (kbhit()) {
+            char key = getch();
+            if (key == 27) {
+                showLevelSelectionForScores();
+                return; // ESC চাপলে বের হবে
+            }
+        }
+    }
 }
+
 
 
 void displayRules() {
@@ -109,11 +147,16 @@ void displayRules() {
     outtextxy(100, 140, (char*)"2. Avoid obstacles and ghosts.");
     outtextxy(100, 180, (char*)"3. Collect points to win.");
     outtextxy(100, 220, (char*)"4. Use arrow keys for movement.");
-    getch();
+    while (true) {
+        if (kbhit()) {
+            char key = getch();
+            if (key == 27) return; // ESC চাপলে বের হবে
+        }
+    }
 }
 
 void mainMenu() {
-    bool redraw = true;  // Flag to track when to redraw the screen
+    redraw = true;  // Flag to track when to redraw the screen
 
     while (true) {
         if (redraw) {
@@ -130,12 +173,16 @@ void mainMenu() {
         if (ismouseclick(WM_LBUTTONDOWN)) {
             int clickX, clickY;
             getmouseclick(WM_LBUTTONDOWN, clickX, clickY);
+            clearmouseclick(WM_LBUTTONDOWN);
 
             if (isButtonClicked(100, 120, 300, 50, clickX, clickY)) {
-                return;  
+                string levelFile = selectLevel();
+                startGame(levelFile);
+                redraw = true; 
             } 
             else if (isButtonClicked(100, 200, 300, 50, clickX, clickY)) {
-                displayScores("score.txt");
+                cleardevice();
+                showLevelSelectionForScores();  // Show level selection for scores
                 redraw = true; 
             } 
             else if (isButtonClicked(100, 280, 300, 50, clickX, clickY)) {
@@ -149,6 +196,68 @@ void mainMenu() {
         }
 
         delay(50); 
+    }
+}
+
+void showLevelSelectionForScores() {
+    cleardevice();
+    settextstyle(DEFAULT_FONT, HORIZ_DIR , 2.5);
+
+    // Easy button
+    setfillstyle(SOLID_FILL, GREEN);
+    bar(100, 100, 300, 150);
+    setcolor(WHITE);
+    outtextxy(160, 120, (char*)"Easy");
+
+    // Medium button
+    setfillstyle(SOLID_FILL, YELLOW);
+    bar(100, 180, 300, 230);
+    setcolor(WHITE);
+    outtextxy(160, 200, (char*)"Medium");
+
+    // Hard button
+    setfillstyle(SOLID_FILL, RED);
+    bar(100, 260, 300, 310);
+    setcolor(WHITE);
+    outtextxy(160, 280, (char*)"Hard");
+
+    outtextxy(100, 350, (char*)"Press ESC to return to Main Menu."); // ESC ইনফো দেখাবে
+
+    while (true) {
+        if (ismouseclick(WM_LBUTTONDOWN)) {
+            int x, y;
+            getmouseclick(WM_LBUTTONDOWN, x, y);
+
+            if (x >= 100 && x <= 300 && y >= 100 && y <= 150) {
+                // Display scores for easy level
+                cleardevice();
+                displayScores("easy");
+                return;
+            }
+
+            if (x >= 100 && x <= 300 && y >= 180 && y <= 230) {
+                // Display scores for medium level
+                cleardevice();
+                displayScores("medium");
+                return;
+            }
+
+            if (x >= 100 && x <= 300 && y >= 260 && y <= 310) {
+                // Display scores for hard level
+                cleardevice();
+                displayScores("hard");
+                return;
+            }
+        }
+
+        // ESC চাপলে মেইন মেনুতে যাবে
+        if (kbhit()) {
+            char key = getch();
+            if (key == 27) {  // ESC (ASCII 27)
+                mainMenu(); 
+                return;
+            }
+        }
     }
 }
 
@@ -199,6 +308,10 @@ string selectLevel(){
                 return "hard_maze.txt"; 
             }
         }
+        if (kbhit()) {
+            char key = getch();
+            if (key == 27) return "";  // ESC চাপলে ফাঁকা string রিটার্ন করবে
+        }
     }
 
 }
@@ -211,30 +324,46 @@ void loadMazeFromFile(const string& filename) {
         exit(1);
     }
 
+    vector<string> tempMaze;  // Store the maze temporarily
     string line;
-    int row = 0;
-    while (getline(file, line) && row < ROWS) {
-        for (int col = 0; col < line.size() && col < COLS; ++col)
-        {
-            if (line[col] == '#') {
-                maze[row][col] = WALL;
-            }
-            else if (line[col] == 'O') {
-                maze[row][col] = OBSTACLE;
-            }
-            else if (line[col] == 'P') {
-                maze[row][col] = POWER_UP;
-            }
-            else if (line[col] == '.') {
-                maze[row][col] = DOT;
-                remainingDots++;
-            }
-            else if (line[col] == 'E') {
-                maze[row][col] = EMPTY;
+    
+    cout << "Reading Maze File: \n";
+    while (getline(file, line)) {
+        //cout << line << endl;  // Debug: Print each line
+        tempMaze.push_back(line);
+    }
+    file.close();
+
+    // Determine the new ROWS and COLS
+    ROWS = tempMaze.size();
+    COLS = (ROWS > 0) ? tempMaze[0].size() : 0;
+    maze.resize(ROWS, vector<int>(COLS, EMPTY));
+
+    remainingDots = 0;
+    for (int i = 0; i < ROWS; ++i) {
+        for (int j = 0; j < COLS; ++j) {
+            char cell = tempMaze[i][j];
+            switch (cell) {
+                case '#': 
+                    maze[i][j] = WALL; 
+                    break;
+                case 'O': 
+                    maze[i][j] = OBSTACLE; 
+                    break;
+                case 'P': 
+                    maze[i][j] = POWER_UP; 
+                    break;
+                case '.': 
+                    maze[i][j] = DOT; 
+                    remainingDots++;  
+                    break;
+                case 'E': 
+                    maze[i][j] = EMPTY; 
+                    break;
             }
         }
-        row++;
     }
+
     if (remainingDots == 0) {
         cout << "Error: No dots found in the maze! Check your maze initialization." << endl;
         exit(1);
@@ -737,6 +866,7 @@ void drawTimer() {
 }
 
 void gameOverScreen(int score) {
+    remove("savegame.txt");
     cleardevice();
 
     settextstyle(DEFAULT_FONT, HORIZ_DIR, 5);
@@ -757,9 +887,10 @@ void gameOverScreen(int score) {
         if (ismouseclick(WM_LBUTTONDOWN)) {
             int clickX, clickY;
             getmouseclick(WM_LBUTTONDOWN, clickX, clickY);
-
+            clearmouseclick(WM_LBUTTONDOWN);  // আগের ক্লিক মুছে ফেলবে
             if (isButtonClicked(200, 300, 300, 50, clickX, clickY)) {
                 cleardevice();
+                redraw = true;  // মেইন মেনু রিড্র করা হবে
                 mainMenu();  
                 return;      
             }
@@ -849,16 +980,39 @@ void mergeSort(vector<int>& scores, int l, int h) {
     }
 }
 
-void updateScores(const string& filename, int newScore) {
+void updateScores(const string& level, int newScore) {
     vector<int> scores;
-
+    string filename;
+    if (level == "easy") {
+        filename = "easy_scores.txt";
+    } else if (level == "medium") {
+        filename = "medium_scores.txt";
+    } else if (level == "hard") {
+        filename = "hard_scores.txt";
+    }
+    else {
+        cout << "Invalid level!" << endl;
+        return;
+    }
     // Read scores
     ifstream infile(filename);
-    int score;
-    while (infile >> score) {
-        scores.push_back(score);
+    if (!infile) { 
+        cout << "Creating file: " << filename << endl;
+        ofstream createFile(filename);  // Create file if it doesn't exist
+        //createFile.close();
+        if (!createFile) {
+            cerr << "Error: Unable to create file: " << filename << endl;
+            return;
+        }
+        createFile.close();
+    } 
+    else {
+        int score;
+        while (infile >> score) {
+            scores.push_back(score);
+        }
+        infile.close();
     }
-    infile.close();
 
     scores.push_back(newScore);
 
@@ -888,6 +1042,118 @@ void updateScores(const string& filename, int newScore) {
     outfile.close();
 }
 
+void drawQuitMenu() {
+    int x = 400, y = 400, width = 400, height = 200;
+
+    // Quit Box
+    setfillstyle(SOLID_FILL, LIGHTGRAY);
+    bar(x, y, x + width, y + height);
+    
+    // Border
+    setcolor(BLACK);
+    rectangle(x, y, x + width, y + height);
+    
+    // Message
+    settextstyle(3, HORIZ_DIR, 3);
+    outtextxy(x + 50, y + 30, (char*)"Do you want to quit?");
+
+    // Yes Button
+    setfillstyle(SOLID_FILL, RED);
+    bar(x + 50, y + 100, x + 150, y + 150);
+    setcolor(WHITE);
+    outtextxy(x + 80, y + 115, (char*)"Yes");
+
+    // No Button
+    setfillstyle(SOLID_FILL, GREEN);
+    bar(x + 250, y + 100, x + 350, y + 150);
+    setcolor(WHITE);
+    outtextxy(x + 280, y + 115, (char*)"No");
+}
+
+void clearQuitMenu() {
+    int x = 400, y = 400, width = 400, height = 200;
+    setfillstyle(SOLID_FILL, BLACK);  
+    bar(x, y, x + width, y + height);
+}
+// Yes/No বাটন হ্যান্ডেল করা
+bool askQuitConfirmation() {
+    drawQuitMenu();
+    
+    while (true) {
+        if (kbhit()) {
+            char key = getch();
+            if (key == 'y' || key == 'Y') return true;  // Yes চাপলে true রিটার্ন
+            if (key == 'n' || key == 'N') return false; // No চাপলে false রিটার্ন
+        }
+
+        // মাউস ইভেন্ট চেক করা
+        if (ismouseclick(WM_LBUTTONDOWN)) {
+            int mx, my;
+            getmouseclick(WM_LBUTTONDOWN, mx, my);
+            clearmouseclick(WM_LBUTTONDOWN);
+            // Yes Button এ ক্লিক করলে
+            if (mx >= 450 && mx <= 550 && my >= 500 && my <= 550) {
+                mainMenu();
+                return true;
+            }
+
+            // No Button এ ক্লিক করলে
+            if (mx >= 650 && mx <= 750 && my >= 500 && my <= 550) {
+                delay(300); // 0.3 সেকেন্ড অপেক্ষা করে মুছে ফেলবে
+                clearQuitMenu();
+                return false; // না হলে গেম চালু থাকবে
+            }
+        }
+    }
+}
+
+string getLevelFromFile(const string& levelFile) {
+    if (levelFile == "easy_maze.txt") return "easy";
+    if (levelFile == "medium_maze.txt") return "medium";
+    if (levelFile == "hard_maze.txt") return "hard";
+    return "unknown"; // যদি লেভেল না মিলে
+}
+
+void startGame(const string& levelFile){
+    gameOver = false;
+    score = 0; 
+    setGhostCount(levelFile);
+    loadMazeFromFile(levelFile);
+    initializeGhostPositions();
+    while (!gameOver) {
+        drawMaze();
+        drawScoreAndLevel();
+
+        if (ghostMoveCounter % ghostMoveFrequency == 0){
+          moveGhosts(); 
+        }
+
+        ghostMoveCounter++;
+        checkCollision();
+
+        if (gameOver) 
+            break;
+
+        if (kbhit()) {
+            char move = getch();
+            if (move == 27) { // ESC এর ASCII কোড = 27
+                    if (askQuitConfirmation()) {
+                        closegraph();
+                        return; // গেম বন্ধ হবে
+                    }
+                } 
+            movePlayer(move);
+        }
+        delay(200);
+    }
+    string level = getLevelFromFile(levelFile);
+    if (level != "unknown") {
+        cout << "up score";
+        updateScores(level, score);
+    }
+    gameOverScreen(score);
+}
+
 int main(){
     srand(time(0));
     initwindow(1200,1200);
@@ -907,16 +1173,26 @@ int main(){
         ghostMoveCounter++;
         checkCollision();
 
-        if (gameOver) break;
+        if (gameOver) 
+            break;
+
         if (kbhit()) {
             char move = getch();
-            if (move == 'q') 
-                break; 
+            if (move == 27) { // ESC এর ASCII কোড = 27
+                    if (askQuitConfirmation()) {
+                        closegraph();
+                        return 0; // গেম বন্ধ হবে
+                    }
+                } 
             movePlayer(move);
         }
         delay(200);
     }
-    updateScores("score.txt", score);
+    string level = getLevelFromFile(mazeFile);
+    if (level != "unknown") {
+        cout << "update score";
+        updateScores(level, score);
+    }
     gameOverScreen(score);
     getch();
     closegraph();
