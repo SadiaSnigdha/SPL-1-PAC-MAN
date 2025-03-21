@@ -1043,12 +1043,16 @@ void drawQuitMenu() {
     bar(x, y, x + width, y + height);
     setcolor(BLACK);
     rectangle(x, y, x + width, y + height);
+
+    setcolor(WHITE);
     settextstyle(3, HORIZ_DIR, 3);
     outtextxy(x + 50, y + 30, (char*)"Do you want to quit?");
+
     setfillstyle(SOLID_FILL, RED);
     bar(x + 50, y + 100, x + 150, y + 150);
     setcolor(WHITE);
     outtextxy(x + 80, y + 115, (char*)"Yes");
+
     setfillstyle(SOLID_FILL, GREEN);
     bar(x + 250, y + 100, x + 350, y + 150);
     setcolor(WHITE);
