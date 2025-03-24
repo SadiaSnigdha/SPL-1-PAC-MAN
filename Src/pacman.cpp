@@ -28,7 +28,7 @@ int ghostCount;
 int ghostsX[10];
 int ghostsY[10];
 int ghostMoveCounter = 0;
-const int ghostMoveFrequency = 5; 
+int ghostMoveFrequency ; 
 
 int DX[] = {-1, 1, 0, 0};
 int DY[] = {0, 0, -1, 1}; 
@@ -1071,12 +1071,8 @@ bool askQuitConfirmation() {
     while (true) {
         if (kbhit()) {
             char key = getch();
-            if (key == 'y' || key == 'Y') {
-                return true;  
-            }
-            if (key == 'n' || key == 'N') {
-                return false;
-            }
+            if (key == 'y' || key == 'Y') return true;  
+            if (key == 'n' || key == 'N') return false;
         }
 
         if (ismouseclick(WM_LBUTTONDOWN)) {
@@ -1121,6 +1117,17 @@ void startGame(const string& levelFile){
     loadMazeFromFile(levelFile);
     initializeGhostPositions();
     startTime = time(0);
+    string level = getLevelFromFile(levelFile);
+    
+    if (level == "easy") {
+        ghostMoveFrequency = 5;
+    } 
+    else if (level == "medium") {
+        ghostMoveFrequency = 3;
+    } 
+    else if (level == "hard") {
+        ghostMoveFrequency = 1;
+    }
 
     while (!gameOver) {
         elapsedTime = time(0) - startTime;
@@ -1150,7 +1157,7 @@ void startGame(const string& levelFile){
         delay(200);
     }
 
-    string level = getLevelFromFile(levelFile);
+
     int finalScore;
 
     if (level != "unknown") {
@@ -1170,6 +1177,17 @@ int main(){
     loadMazeFromFile(mazeFile);
     initializeGhostPositions();
     startTime = time(0);
+    string level = getLevelFromFile(mazeFile);
+
+    if (level == "easy") {
+        ghostMoveFrequency = 5;
+    } 
+    else if (level == "medium") {
+        ghostMoveFrequency = 3;
+    } 
+    else if (level == "hard") {
+        ghostMoveFrequency = 1;
+    }
 
     while (!gameOver) {
         elapsedTime = time(0) - startTime;
@@ -1199,7 +1217,7 @@ int main(){
         delay(200);
     }
 
-    string level = getLevelFromFile(mazeFile);
+    
     int finalScore;
 
     if (level != "unknown") {
