@@ -127,15 +127,21 @@ void displayScores(const string& level) {
     settextstyle(DEFAULT_FONT, HORIZ_DIR, 3);
     outtextxy(100, 50, (char*)"Top Scores:");
 
-    int numScoresToShow = min(10, (int)scores.size());
+    int numScoresToShow = min(100, (int)scores.size());
 
     for (int i = 0; i < numScoresToShow; i++) {
         char scoreText[50];
-        sprintf(scoreText, "%d: %d", i + 1, scores[i]);
+
+        if(i < 9){
+            sprintf(scoreText, "0%d: %d", i + 1, scores[i]);
+        }
+        else 
+            sprintf(scoreText, "%d: %d", i + 1, scores[i]);
+
         outtextxy(100, 100 + i * 30, scoreText);
     }
 
-    outtextxy(100, 400, (char*)"Press ESC to return to Main Menu.");
+    //outtextxy(100, 400, (char*)"Press ESC to return to Main Menu.");
 
     while (true) {
         if (kbhit()) {
@@ -912,16 +918,16 @@ vector<int> readScoresFromFile(const string& filename) {
     return scores;
 }
 
-void writeScoresToFile(const string& filename, const vector<int>& scores) {
-    ofstream file(filename);
+// void writeScoresToFile(const string& filename, const vector<int>& scores) {
+//     ofstream file(filename);
 
-    if (file.is_open()) {
-        for (int score : scores) {
-            file << score << endl;
-        }
-        file.close();
-    }
-}
+//     if (file.is_open()) {
+//         for (int score : scores) {
+//             file << score << endl;
+//         }
+//         file.close();
+//     }
+// }
 
 void merge(vector<int>& scores, int l, int mid, int h) {
     int n1 = mid - l + 1;
